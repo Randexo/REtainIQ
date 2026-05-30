@@ -2,6 +2,7 @@ services:
   - type: web
     name: churn-dashboard
     env: python
+    pythonVersion: "3.11.9"
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --workers 1 --timeout 180 --bind 0.0.0.0:$PORT
     envVars:
