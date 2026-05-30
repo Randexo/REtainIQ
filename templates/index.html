@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RetainIQ — Customer Churn Prevention</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" />
+  <style>
+    :root {
+      --sidebar-bg: #1a2e1a;
+      --accent: #ef4444;
+      --accent-hover: #dc2626;
+      --body-bg: #f5f4f0;
+      --card-bg: #fff;
+      --border: rgba(0,0,0,0.07);
+      --text-primary: #111;
+      --text-secondary: #666;
+      --text-muted: #aaa;
+      --red: #ef4444;
+      --amber: #f59e0b;
+      --green: #22c55e;
+      --blue: #3b82f6;
+      --disclaimer-bg: #FAEEDA;
+      --disclaimer-text: #633806;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--body-bg);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      font-size: 13px;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 224px; flex-shrink: 0;
+      background: var(--sidebar-bg);
+      min-height: 100vh; display: flex; flex-direction: column;
+      padding: 24px 0; position: sticky; top: 0; height: 100vh;
+    }
+
+    .sidebar-brand {
+      padding: 0 18px 24px; display: flex; align-items: center; gap: 10px;
+    }
+
+    .brand-icon {
+      width: 32px; height: 32px; background: var(--accent);
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 1rem; flex-shrink: 0;
+    }
+
+    .brand-name { font-size: 0.95rem; font-weight: 700; color: #fff; }
+    .brand-sub  { font-size: 0.68rem; color: rgba(255,255,255,0.4); margin-top: 1px; }
+
+    .sidebar-section { padding: 0 12px 8px; }
+    .sidebar-section-label {
+      font-size: 0.62rem; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: rgba(255,255,255,0.28); padding: 0 8px 8px;
+    }
+
+    .sidebar-item {
+      display: flex; align-items: center; gap: 9px;
+      padding: 9px 10px; border-radius: 7px; cursor: pointer;
+      color: rgba(255,255,255,0.55); font-size: 0.83rem;
+      transition: background 0.13s, color 0.13s;
+      border-left: 3px solid transparent;
+      margin-bottom: 2px; user-select: none;
+    }
+    .sidebar-item:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.85); }
+    .sidebar-item.active { background: rgba(255,255,255,0.10); color: #e8f5e8; border-left-color: var(--accent); }
+    .sidebar-item i { font-size: 1.05rem; flex-shrink: 0; }
+
+    .sidebar-divider { border: none; border-top: 1px solid rgba(255,255,255,0.07); margin: 12px 14px; }
+
+    .sidebar-footer {
+      margin-top: auto; padding: 0 18px 4px;
+      font-size: 0.65rem; color: rgba(255,255,255,0.22); line-height: 1.6;
+    }
+
+    /* ── Content ── */
+    .content { flex: 1; overflow-y: auto; padding: 36px 40px; min-width: 0; }
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* ── Page header ── */
+    .page-header { margin-bottom: 28px; }
+    .page-header h1 { font-size: 1.3rem; font-weight: 700; color: var(--text-primary); }
+    .page-header p  { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
+
+    /* ── Metric cards ── */
+    .metrics-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 20px; }
+    .metric-card {
+      background: var(--card-bg); border: 0.5px solid var(--border);
+      border-radius: 12px; padding: 18px 20px; border-top: 3px solid transparent;
+    }
+    .metric-card.green { border-top-color: var(--green); }
+    .metric-card.red   { border-top-color: var(--red); }
+    .metric-card.amber { border-top-color: var(--amber); }
+    .metric-card.blue  { border-top-color: var(--blue); }
+    .metric-label { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 8px; }
+    .metric-value { font-size: 1.75rem; font-weight: 700; color: var(--text-primary); line-height: 1; margin-bottom: 5px; }
+    .metric-note  { font-size: 0.7rem; color: #bbb; }
+
+    /* ── Charts grid ── */
+    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .chart-card {
+      background: var(--card-bg); border: 0.5px solid var(--border);
+      border-radius: 12px; padding: 22px 24px;
+    }
+    .chart-title { font-size: 0.87rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+    .chart-sub   { font-size: 0.73rem; color: var(--text-muted); margin-bottom: 20px; }
+
+    .bar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 13px; }
+    .bar-row:last-child { margin-bottom: 0; }
+    .bar-label { font-size: 0.76rem; color: #555; width: 150px; flex-shrink: 0; }
+    .bar-track { flex: 1; height: 8px; background: #f3f4f6; border-radius: 4px; overflow: hidden; }
+    .bar-fill  { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+    .bar-fill.red    { background: var(--red); }
+    .bar-fill.orange { background: #f97316; }
+    .bar-fill.amber  { background: var(--amber); }
+    .bar-value { font-size: 0.76rem; font-weight: 600; color: #333; width: 68px; text-align: right; flex-shrink: 0; }
+
+    /* ── Table ── */
+    .table-card {
+      background: var(--card-bg); border: 0.5px solid rgba(0,0,0,0.08);
+      border-radius: 12px; overflow: hidden;
+    }
+
+    .table-toolbar {
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+
+    .filter-btn {
+      padding: 5px 14px; border-radius: 20px; font-size: 0.76rem;
+      border: 0.5px solid var(--border); background: #fff;
+      cursor: pointer; transition: background 0.12s, color 0.12s, border-color 0.12s;
+      color: var(--text-secondary);
+    }
+    .filter-btn.active { background: var(--sidebar-bg); color: #fff; border-color: var(--sidebar-bg); }
+    .filter-btn:hover:not(.active) { border-color: #999; }
+
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      background: #fafaf8; padding: 11px 14px; text-align: left;
+      font-size: 0.68rem; font-weight: 700; letter-spacing: 0.07em;
+      text-transform: uppercase; color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr.data-row {
+      border-bottom: 1px solid #f5f4f0; cursor: pointer;
+      transition: background 0.1s;
+    }
+    tbody tr.data-row:last-child { border-bottom: none; }
+    tbody tr.data-row:hover { background: #fafaf8; }
+    tbody tr.data-row.hidden { display: none; }
+    tbody td { padding: 11px 14px; font-size: 0.82rem; vertical-align: middle; }
+
+    .score-wrap  { display: flex; align-items: center; gap: 8px; }
+    .score-track { flex: 1; height: 7px; background: #f3f4f6; border-radius: 3px; overflow: hidden; min-width: 60px; }
+    .score-fill  { height: 100%; border-radius: 3px; }
+    .score-fill.critical { background: var(--red); }
+    .score-fill.high     { background: #f97316; }
+    .score-fill.medium   { background: var(--amber); }
+    .score-num { font-size: 0.76rem; font-weight: 600; color: #444; flex-shrink: 0; width: 34px; text-align: right; }
+
+    .badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; }
+    .badge-critical { background: #FCEBEB; color: #A32D2D; }
+    .badge-high     { background: #FAEEDA; color: #854F0B; }
+    .badge-medium   { background: #EAF3DE; color: #3B6D11; }
+
+    .complain-yes { color: var(--red); font-size: 0.8rem; }
+    .complain-no  { color: #d1d5db; font-size: 0.8rem; }
+    .action-text  { font-size: 0.74rem; color: var(--text-secondary); }
+
+    .table-footer-note {
+      padding: 11px 18px; font-size: 0.72rem;
+      color: var(--text-muted); border-top: 1px solid var(--border);
+      font-style: italic;
+    }
+
+    /* ── Scenario page (Page 2) ── */
+    .scenario-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    .scenario-card {
+      background: var(--card-bg); border: 0.5px solid var(--border);
+      border-radius: 12px; padding: 22px 24px;
+    }
+
+    .slider-group { margin-bottom: 20px; }
+    .slider-group:last-of-type { margin-bottom: 0; }
+    .slider-label {
+      font-size: 0.78rem; font-weight: 600; color: var(--text-primary);
+      margin-bottom: 2px; display: flex; justify-content: space-between;
+    }
+    .slider-val { color: var(--accent); font-weight: 700; }
+    .slider-note { font-size: 0.68rem; color: var(--text-muted); margin-bottom: 8px; }
+    input[type=range] {
+      width: 100%; accent-color: var(--accent);
+      height: 4px; border-radius: 2px; cursor: pointer;
+    }
+
+    .formula-card {
+      background: var(--card-bg); border: 0.5px solid var(--border);
+      border-radius: 12px; padding: 22px 24px; margin-bottom: 14px;
+    }
+    .formula-title { font-size: 0.87rem; font-weight: 600; margin-bottom: 4px; }
+    .formula-sub   { font-size: 0.73rem; color: var(--text-muted); margin-bottom: 16px; }
+    .formula-eq {
+      font-size: 0.82rem; color: #555; background: #fafaf8;
+      border: 0.5px solid var(--border); border-radius: 8px;
+      padding: 10px 14px; margin-bottom: 6px; font-family: monospace;
+    }
+    .formula-note { font-size: 0.7rem; color: var(--text-muted); margin-bottom: 14px; }
+    .formula-total {
+      display: flex; justify-content: flex-end; align-items: baseline;
+      gap: 8px; padding-top: 10px; border-top: 1px solid var(--border);
+    }
+    .formula-total-label { font-size: 0.78rem; color: var(--text-secondary); }
+    .formula-total-value { font-size: 1.4rem; font-weight: 700; color: var(--red); }
+
+    .recovery-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+    .recovery-table th {
+      font-size: 0.67rem; font-weight: 700; letter-spacing: 0.07em;
+      text-transform: uppercase; color: var(--text-muted);
+      text-align: left; padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .recovery-table td { padding: 10px 10px; font-size: 0.82rem; border-bottom: 1px solid #f5f4f0; }
+    .recovery-table tr:last-child td { border-bottom: none; font-weight: 700; }
+    .rev-value { color: #16a34a; font-weight: 600; }
+
+    .roi-row {
+      display: flex; align-items: center; gap: 12px; margin: 14px 0;
+    }
+    .roi-box {
+      flex: 1; background: var(--card-bg); border: 0.5px solid var(--border);
+      border-radius: 12px; padding: 16px 18px; text-align: center;
+    }
+    .roi-box-label { font-size: 0.7rem; color: var(--text-muted); margin-bottom: 6px; }
+    .roi-box-value { font-size: 1.5rem; font-weight: 700; }
+    .roi-box-value.red   { color: var(--red); }
+    .roi-box-value.green { color: #16a34a; }
+    .roi-arrow { font-size: 1.2rem; color: var(--text-muted); flex-shrink: 0; }
+
+    /* ── Explain page (Page 4) ── */
+    .explain-section {
+      background: var(--card-bg); border: 0.5px solid var(--border);
+      border-radius: 12px; padding: 22px 24px; margin-bottom: 14px;
+    }
+    .explain-section-title { font-size: 0.87rem; font-weight: 600; margin-bottom: 4px; }
+    .explain-section-sub   { font-size: 0.73rem; color: var(--text-muted); margin-bottom: 18px; }
+
+    .explain-input-row { display: flex; gap: 10px; margin-bottom: 18px; }
+    .explain-input {
+      flex: 1; padding: 11px 14px;
+      border: 0.5px solid rgba(0,0,0,0.15); border-radius: 8px;
+      font-size: 0.86rem; outline: none; background: #fff;
+      transition: border-color 0.18s;
+    }
+    .explain-input:focus { border-color: var(--accent); }
+
+    .primary-btn {
+      background: var(--sidebar-bg); color: #fff;
+      border: none; padding: 11px 20px; border-radius: 8px;
+      font-size: 0.86rem; font-weight: 600; cursor: pointer;
+      transition: background 0.15s; white-space: nowrap;
+      display: flex; align-items: center; gap: 7px;
+    }
+    .primary-btn:hover:not(:disabled) { background: #243824; }
+    .primary-btn:disabled { background: #bbb; cursor: not-allowed; }
+
+    .explain-result {
+      display: none;
+      border: 0.5px solid var(--border); border-radius: 10px; overflow: hidden;
+    }
+    .explain-result.visible { display: block; }
+
+    .explain-result-header {
+      background: #fafaf8; padding: 14px 18px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .explain-cid { font-size: 1rem; font-weight: 700; }
+    .explain-body { padding: 16px 18px; }
+    .explain-paragraph { font-size: 0.85rem; line-height: 1.7; color: #333; margin-bottom: 16px; }
+
+    .signal-list { margin-bottom: 16px; }
+    .signal-item {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 8px 0; border-bottom: 1px solid #f5f4f0; font-size: 0.82rem;
+    }
+    .signal-item:last-child { border-bottom: none; }
+    .signal-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+    .signal-dot.critical { background: var(--red); }
+    .signal-dot.high     { background: var(--amber); }
+    .signal-dot.medium   { background: #a3c47b; }
+    .signal-label { font-weight: 600; color: var(--text-primary); }
+    .signal-value { color: var(--text-secondary); margin-left: auto; text-align: right; }
+
+    .action-box {
+      background: #fffbeb; border: 1px solid #fde68a;
+      border-radius: 8px; padding: 12px 14px;
+    }
+    .action-box-label { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #92400e; margin-bottom: 4px; }
+    .action-box-title { font-size: 0.86rem; font-weight: 700; color: #78350f; margin-bottom: 4px; }
+    .action-box-ctx   { font-size: 0.8rem; color: #92400e; line-height: 1.55; }
+
+    /* ── Strategic questions ── */
+    .quick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+    .quick-btn {
+      background: #fff; border: 0.5px solid rgba(0,0,0,0.12);
+      border-radius: 8px; padding: 10px 14px; font-size: 0.79rem;
+      color: #333; cursor: pointer; text-align: left;
+      transition: background 0.12s, border-color 0.12s; line-height: 1.4;
+    }
+    .quick-btn:hover { background: #fff5f5; border-color: var(--accent); color: #991b1b; }
+
+    .query-form { display: flex; gap: 10px; margin-bottom: 18px; }
+    .query-input {
+      flex: 1; padding: 11px 14px;
+      border: 0.5px solid rgba(0,0,0,0.15); border-radius: 8px;
+      font-size: 0.86rem; outline: none; background: #fff;
+      transition: border-color 0.18s;
+    }
+    .query-input:focus { border-color: var(--accent); }
+    .query-btn {
+      background: var(--sidebar-bg); color: #fff;
+      border: none; padding: 11px 22px; border-radius: 8px;
+      font-size: 0.86rem; font-weight: 600; cursor: pointer;
+      transition: background 0.18s; white-space: nowrap;
+    }
+    .query-btn:hover:not(:disabled) { background: #243824; }
+    .query-btn:disabled { background: #bbb; cursor: not-allowed; }
+
+    .response-area {
+      background: #fff; border: 0.5px solid var(--border);
+      border-radius: 12px; padding: 24px; min-height: 130px;
+    }
+    .response-empty {
+      color: #ccc; font-size: 0.84rem;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 80px; gap: 8px;
+    }
+    .response-answer { font-size: 0.87rem; line-height: 1.72; color: #222; white-space: pre-wrap; margin-bottom: 16px; }
+
+    .source-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .source-chip {
+      background: #f0f9f0; border: 0.5px solid rgba(34,197,94,0.2);
+      border-radius: 20px; padding: 3px 10px;
+      font-size: 0.7rem; color: #166534;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+
+    /* ── Disclaimer ── */
+    .disclaimer {
+      margin-top: 20px; padding: 13px 16px;
+      background: var(--disclaimer-bg); border: 0.5px solid #f5c07a;
+      border-radius: 8px; font-size: 0.72rem;
+      color: var(--disclaimer-text); line-height: 1.65;
+    }
+    .disclaimer strong { font-weight: 700; }
+
+    /* ── Spinner ── */
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff;
+      border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0;
+    }
+    .spinner.dark { border-color: rgba(0,0,0,0.1); border-top-color: #555; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
+    .loading-dash { color: #ddd; animation: pulse 1.2s ease-in-out infinite; }
+  </style>
+</head>
+<body>
+
+<!-- ── Sidebar ── -->
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-icon"><i class="ti ti-shield-check-filled"></i></div>
+    <div class="brand-text">
+      <div class="brand-name">RetainIQ</div>
+      <div class="brand-sub">Churn Prevention</div>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Analytics</div>
+    <div class="sidebar-item active" id="nav-revenue" onclick="navigate('revenue')">
+      <i class="ti ti-chart-bar"></i>Revenue at Risk
+    </div>
+    <div class="sidebar-item" id="nav-scenario" onclick="navigate('scenario')">
+      <i class="ti ti-target"></i>Retention Plan
+    </div>
+    <div class="sidebar-item" id="nav-customers" onclick="navigate('customers')">
+      <i class="ti ti-users"></i>At-Risk Customers
+    </div>
+  </div>
+
+  <hr class="sidebar-divider" />
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">AI Tools</div>
+    <div class="sidebar-item" id="nav-explain" onclick="navigate('explain')">
+      <i class="ti ti-search"></i>Explain a Customer
+    </div>
+  </div>
+
+  <div class="sidebar-footer">
+    <div>POC · Illustrative data</div>
+    <div>Powered by Gemini AI</div>
+  </div>
+</nav>
+
+<!-- ── Main content ── -->
+<main class="content">
+
+  <!-- ─────────── Page 1: Revenue at Risk ─────────── -->
+  <div class="page active" id="page-revenue">
+    <div class="page-header">
+      <h1>Revenue at Risk</h1>
+      <p>Customers predicted to leave in the next 30 days — still active, still recoverable</p>
+    </div>
+
+    <div class="metrics-row">
+      <div class="metric-card blue">
+        <div class="metric-label">Customers Monitored</div>
+        <div class="metric-value loading-dash" id="m-total">—</div>
+        <div class="metric-note">Active — last purchase ≤90d</div>
+      </div>
+      <div class="metric-card red">
+        <div class="metric-label">At Risk of Leaving</div>
+        <div class="metric-value loading-dash" id="m-highrisk">—</div>
+        <div class="metric-note loading-dash" id="m-highrisk-pct">— % of customer base</div>
+      </div>
+      <div class="metric-card amber">
+        <div class="metric-label">Revenue at Risk</div>
+        <div class="metric-value loading-dash" id="m-revenue">—</div>
+        <div class="metric-note">Annualized — active customers only</div>
+      </div>
+      <div class="metric-card green">
+        <div class="metric-label">Expected Recoverable</div>
+        <div class="metric-value loading-dash" id="m-recoverable">—</div>
+        <div class="metric-note">If retention program runs</div>
+      </div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title">Revenue at Risk by Segment</div>
+        <div class="chart-sub">Annualized, active customers only</div>
+        <div id="segmentBars"><div style="color:#ddd;font-size:0.82rem;padding:20px 0;">Loading…</div></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Hypothesized Churn Drivers</div>
+        <div class="chart-sub">Feature importance from ML model — to be validated with live data</div>
+        <div id="driverBars"><div style="color:#ddd;font-size:0.82rem;padding:20px 0;">Loading…</div></div>
+      </div>
+    </div>
+
+    <div class="disclaimer">
+      <strong>Model:</strong> Classifier trained on public Kaggle dataset — not proprietary customer data. &nbsp;
+      <strong>Scope:</strong> Active customers only (last purchase ≤90 days). Lost customers excluded. &nbsp;
+      <strong>In production:</strong> model retrains weekly on live transaction data; financials pulled from ERP.
+    </div>
+  </div>
+
+  <!-- ─────────── Page 2: Retention Plan ─────────── -->
+  <div class="page" id="page-scenario">
+    <div class="page-header">
+      <h1>Retention Plan</h1>
+      <p>Adjust assumptions to model your scenario — all figures recalculate in real time</p>
+    </div>
+
+    <!-- Sliders -->
+    <div class="scenario-card" style="margin-bottom:14px;">
+      <div class="chart-title">Scenario assumptions</div>
+      <div class="chart-sub" style="margin-bottom:20px;">These are inputs, not outputs — set them to reflect your business reality</div>
+
+      <div class="slider-group">
+        <div class="slider-label">
+          Avg. annual revenue per customer
+          <span class="slider-val" id="sv-rev">$2,400</span>
+        </div>
+        <div class="slider-note">In production: pulled per customer from ERP/CRM.</div>
+        <input type="range" id="sl-rev" min="500" max="10000" step="100" value="2400" oninput="updateScenario()" />
+      </div>
+
+      <div class="slider-group">
+        <div class="slider-label">
+          Execution cost per intervention
+          <span class="slider-val" id="sv-cost">$15</span>
+        </div>
+        <div class="slider-note">Agent time, email/SMS platform. Excludes discount value.</div>
+        <input type="range" id="sl-cost" min="5" max="50" step="1" value="15" oninput="updateScenario()" />
+      </div>
+
+      <div class="slider-group">
+        <div class="slider-label">
+          Discount offered to Critical customers
+          <span class="slider-val" id="sv-disc">20%</span>
+        </div>
+        <div class="slider-note">Applied to one purchase (avg. order value: $200). High and Medium receive cashback offers — no discount cost assumed.</div>
+        <input type="range" id="sl-disc" min="0" max="40" step="1" value="20" oninput="updateScenario()" />
+      </div>
+    </div>
+
+    <!-- Investment formula -->
+    <div class="formula-card">
+      <div class="formula-title">Total program investment</div>
+      <div class="formula-sub">Execution cost for all at-risk customers, plus discount cost for Critical segment only</div>
+      <div class="formula-eq" id="sc-invest-eq">= (894 × $15) + (134 × $200 × 20%) = $13,410 + $5,360</div>
+      <div class="formula-note">Execution cost applied to all 894 at-risk customers; discount only to Critical segment.</div>
+      <div class="formula-total">
+        <span class="formula-total-label">Total investment</span>
+        <span class="formula-total-value" id="sc-total-invest">$18,770</span>
+      </div>
+    </div>
+
+    <!-- Recovery table -->
+    <div class="formula-card">
+      <div class="formula-title">Revenue recoverable</div>
+      <div class="formula-sub">= customers × avg. annual revenue × recovery rate</div>
+      <table class="recovery-table">
+        <thead>
+          <tr>
+            <th>Segment</th>
+            <th>Customers</th>
+            <th>Formula</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody id="sc-recovery-rows">
+          <!-- filled by JS -->
+        </tbody>
+      </table>
+      <p style="font-size:0.7rem;color:var(--text-muted);margin-top:10px;font-style:italic;">
+        Recovery rates by segment: Critical 15% (hardest to retain — needs call + discount), High 25% (email + cashback), Medium 35% (re-engagement). Higher recovery in Medium because churn signal is weaker.
+      </p>
+    </div>
+
+    <!-- ROI row -->
+    <div class="roi-row">
+      <div class="roi-box">
+        <div class="roi-box-label">Total investment</div>
+        <div class="roi-box-value red" id="sc-roi-invest">—</div>
+      </div>
+      <div class="roi-arrow">÷</div>
+      <div class="roi-box">
+        <div class="roi-box-label">Revenue retained — Year 1</div>
+        <div class="roi-box-value green" id="sc-roi-rev">—</div>
+      </div>
+      <div class="roi-arrow">=</div>
+      <div class="roi-box">
+        <div class="roi-box-label">Net ROI</div>
+        <div class="roi-box-value green" id="sc-roi-val">—</div>
+      </div>
+    </div>
+
+    <div class="disclaimer">
+      <strong>All figures are illustrative.</strong> Revenue per customer, recovery rates, and intervention costs are assumptions — not measured outcomes.
+      In production: revenue pulled from ERP, recovery rates validated against historical retention campaigns.
+    </div>
+  </div>
+
+  <!-- ─────────── Page 3: At-Risk Customers ─────────── -->
+  <div class="page" id="page-customers">
+    <div class="page-header">
+      <h1>At-Risk Customers</h1>
+      <p>All customers predicted to leave in next 30 days — filter by segment to match your team's capacity</p>
+    </div>
+
+    <div class="table-card">
+      <div class="table-toolbar">
+        <button class="filter-btn active" id="fb-all"      onclick="filterTable('all')">All <span id="fb-all-count"></span></button>
+        <button class="filter-btn"        id="fb-Critical" onclick="filterTable('Critical')">Critical <span id="fb-crit-count"></span></button>
+        <button class="filter-btn"        id="fb-High"     onclick="filterTable('High')">High <span id="fb-high-count"></span></button>
+        <button class="filter-btn"        id="fb-Medium"   onclick="filterTable('Medium')">Medium <span id="fb-med-count"></span></button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Customer ID</th>
+            <th>Churn Score</th>
+            <th>Revenue at Risk</th>
+            <th>Days Inactive</th>
+            <th>Satisfaction</th>
+            <th>Complaint</th>
+            <th>Segment</th>
+            <th>Recommended Action</th>
+          </tr>
+        </thead>
+        <tbody id="customerTableBody">
+          <tr>
+            <td colspan="8" style="text-align:center;padding:36px;color:#ccc;font-size:0.84rem;">
+              <span class="spinner dark" style="margin-right:8px;vertical-align:middle;"></span>Loading…
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="table-footer-note">Click any row to view full explanation and generate a retention message</div>
+    </div>
+  </div>
+
+  <!-- ─────────── Page 4: Explain a Customer ─────────── -->
+  <div class="page" id="page-explain">
+    <div class="page-header">
+      <h1>Explain a Customer</h1>
+      <p>Enter a customer ID to understand exactly why they're at risk — and what to do about it</p>
+    </div>
+
+    <!-- Section 1: Customer explanation -->
+    <div class="explain-section">
+      <div class="explain-section-title">Customer explanation</div>
+      <div class="explain-section-sub">The model breaks down which signals drove this customer's churn score — so your team knows what to say before picking up the phone</div>
+
+      <div class="explain-input-row">
+        <input class="explain-input" id="explainInput" type="text"
+          placeholder="Enter customer ID, e.g. #10035"
+          onkeydown="if(event.key==='Enter') runExplain()" />
+        <button class="primary-btn" id="explainBtn" onclick="runExplain()">
+          <i class="ti ti-arrow-up-right"></i>Explain
+        </button>
+      </div>
+
+      <div class="explain-result" id="explainResult">
+        <div class="explain-result-header">
+          <div class="explain-cid" id="er-cid">—</div>
+          <span class="badge" id="er-badge">—</span>
+        </div>
+        <div class="explain-body">
+          <p class="explain-paragraph" id="er-explanation">—</p>
+          <div class="signal-list" id="er-signals"></div>
+          <div class="action-box">
+            <div class="action-box-label">Recommended action</div>
+            <div class="action-box-title" id="er-action-title">—</div>
+            <div class="action-box-ctx" id="er-action-ctx">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: Strategic questions -->
+    <div class="explain-section">
+      <div class="explain-section-title">Strategic questions</div>
+      <div class="explain-section-sub">Business-level questions the dashboard can't answer with a chart</div>
+
+      <div class="quick-grid">
+        <button class="quick-btn" onclick="setQuery('If I have budget for 200 interventions this week — which 200 customers do I call first to maximize retained revenue?')">
+          If I have budget for 200 interventions this week — which customers do I prioritize to maximize retained revenue?
+        </button>
+        <button class="quick-btn" onclick="setQuery('Do customers who complain and then receive a discount have higher LTV at 6 months than those who do not complain?')">
+          Do customers who complain and receive a discount have higher LTV at 6 months?
+        </button>
+        <button class="quick-btn" onclick="setQuery('At what point does customer inactivity become unrecoverable — where do interventions stop working?')">
+          At what point does inactivity become unrecoverable — where do interventions stop working?
+        </button>
+        <button class="quick-btn" onclick="setQuery('Which customer profile should I prioritize: high revenue at risk or highest probability of successful retention?')">
+          Should I prioritize high revenue at risk or highest probability of successful retention?
+        </button>
+      </div>
+
+      <div class="query-form">
+        <input class="query-input" id="queryInput" type="text"
+          placeholder="Ask anything about churn, retention, or your customer segments…"
+          onkeydown="if(event.key==='Enter') submitQuery()" />
+        <button class="query-btn" id="queryBtn" onclick="submitQuery()">Ask ↗</button>
+      </div>
+
+      <div class="response-area" id="responseArea">
+        <div class="response-empty">Ask a question to get AI-powered insights</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  let dashboardData  = null;
+  let scenarioCache  = null;   // latest /api/scenario result
+
+  // ── Navigation ──────────────────────────────────────────────────────────────
+  function navigate(page) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+    document.getElementById('nav-' + page).classList.add('active');
+  }
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+  function fmt$(n) {
+    if (n >= 1_000_000) return '$' + (n / 1_000_000).toFixed(1) + 'M';
+    if (n >= 1_000)     return '$' + Math.round(n / 1_000) + 'K';
+    return '$' + Math.round(n).toLocaleString();
+  }
+
+  function segClass(seg) {
+    return { Critical:'critical', High:'high', Medium:'medium' }[seg] ?? 'medium';
+  }
+
+  function escHtml(str) {
+    const d = document.createElement('div');
+    d.appendChild(document.createTextNode(String(str)));
+    return d.innerHTML;
+  }
+
+  // ── Dashboard load ───────────────────────────────────────────────────────────
+  async function loadDashboard() {
+    try {
+      const res = await fetch('/api/dashboard');
+      dashboardData = await res.json();
+      document.querySelectorAll('.loading-dash').forEach(el => el.classList.remove('loading-dash'));
+
+      const s    = dashboardData.summary;
+      const segs = s.segments;
+      const sc   = s.scenario;
+
+      // Page 1 metrics
+      document.getElementById('m-total').textContent       = s.total_customers.toLocaleString();
+      document.getElementById('m-highrisk').textContent    = s.high_risk_count.toLocaleString();
+      document.getElementById('m-highrisk-pct').textContent = (s.high_risk_count / s.total_customers * 100).toFixed(1) + '% of customer base';
+      document.getElementById('m-revenue').textContent     = fmt$(s.revenue_at_risk);
+      document.getElementById('m-recoverable').textContent = fmt$(sc.revenue_recoverable.total);
+
+      renderSegmentBars(segs);
+      renderDriverBars(dashboardData.top_churn_drivers);
+      renderCustomerTable(dashboardData.customers_at_risk);
+
+      // Filter counts
+      document.getElementById('fb-all-count').textContent  = '(' + s.high_risk_count + ')';
+      document.getElementById('fb-crit-count').textContent = '(' + segs.critical.count + ')';
+      document.getElementById('fb-high-count').textContent = '(' + segs.high.count + ')';
+      document.getElementById('fb-med-count').textContent  = '(' + segs.medium.count + ')';
+
+      // Scenario page initial render
+      scenarioCache = sc;
+      renderScenario(sc, segs, s.high_risk_count);
+    } catch (err) {
+      console.error('Dashboard load failed:', err);
+    }
+  }
+
+  function renderSegmentBars(segs) {
+    const items  = [
+      { label: 'Critical', count: segs.critical.count, revenue: segs.critical.revenue, color: 'red' },
+      { label: 'High',     count: segs.high.count,     revenue: segs.high.revenue,     color: 'orange' },
+      { label: 'Medium',   count: segs.medium.count,   revenue: segs.medium.revenue,   color: 'amber' },
+    ];
+    const maxRev = Math.max(...items.map(i => i.revenue), 1);
+
+    document.getElementById('segmentBars').innerHTML = items.map(i => `
+      <div class="bar-row">
+        <div class="bar-label">${escHtml(i.label)} <span style="color:#bbb;font-size:0.68rem;">(${i.count.toLocaleString()})</span></div>
+        <div class="bar-track"><div class="bar-fill ${i.color}" style="width:${(i.revenue/maxRev*100).toFixed(1)}%"></div></div>
+        <div class="bar-value">${fmt$(i.revenue)}</div>
+      </div>`).join('');
+  }
+
+  function renderDriverBars(drivers) {
+    const maxImp = Math.max(...drivers.map(d => d.impact), 0.001);
+    document.getElementById('driverBars').innerHTML = drivers.map(d => `
+      <div class="bar-row">
+        <div class="bar-label">${escHtml(d.feature)}</div>
+        <div class="bar-track"><div class="bar-fill amber" style="width:${(d.impact/maxImp*100).toFixed(1)}%"></div></div>
+        <div class="bar-value">${(d.impact*100).toFixed(0)}%</div>
+      </div>`).join('');
+  }
+
+  function renderCustomerTable(customers) {
+    if (!customers || customers.length === 0) {
+      document.getElementById('customerTableBody').innerHTML =
+        '<tr><td colspan="8" style="text-align:center;padding:32px;color:#ccc;">No at-risk customers found.</td></tr>';
+      return;
+    }
+
+    document.getElementById('customerTableBody').innerHTML = customers.map(c => {
+      const cls   = segClass(c.segment);
+      const pct   = (c.churn_score * 100).toFixed(0);
+      const stars = '★'.repeat(c.satisfaction_score) +
+                    '<span style="color:#e5e7eb">' + '★'.repeat(5 - c.satisfaction_score) + '</span>';
+      const complaint = c.complain
+        ? '<span class="complain-yes"><i class="ti ti-alert-circle"></i> Yes</span>'
+        : '<span class="complain-no">—</span>';
+
+      return `<tr class="data-row" data-seg="${escHtml(c.segment)}"
+                  onclick="goToExplain(${c.customer_id})">
+        <td><strong>#${c.customer_id}</strong></td>
+        <td>
+          <div class="score-wrap">
+            <div class="score-track"><div class="score-fill ${cls}" style="width:${pct}%"></div></div>
+            <span class="score-num">${pct}%</span>
+          </div>
+        </td>
+        <td><strong>${fmt$(c.revenue_at_risk)}</strong></td>
+        <td>${c.days_inactive}d</td>
+        <td style="color:#f59e0b;">${stars}</td>
+        <td>${complaint}</td>
+        <td><span class="badge badge-${cls}">${escHtml(c.segment)}</span></td>
+        <td><span class="action-text">${escHtml(c.recommended_action)}</span></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── Table filter ─────────────────────────────────────────────────────────────
+  function filterTable(seg) {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(seg === 'all' ? 'fb-all' : 'fb-' + seg).classList.add('active');
+
+    document.querySelectorAll('#customerTableBody .data-row').forEach(row => {
+      if (seg === 'all' || row.dataset.seg === seg) {
+        row.classList.remove('hidden');
+      } else {
+        row.classList.add('hidden');
+      }
+    });
+  }
+
+  // ── Navigate to Explain page with pre-filled ID ───────────────────────────
+  function goToExplain(customerId) {
+    navigate('explain');
+    document.getElementById('explainInput').value = '#' + customerId;
+    runExplain();
+  }
+
+  // ── Scenario (Page 2) ────────────────────────────────────────────────────────
+  async function updateScenario() {
+    const avgRev  = parseInt(document.getElementById('sl-rev').value);
+    const execCost= parseInt(document.getElementById('sl-cost').value);
+    const discPct = parseInt(document.getElementById('sl-disc').value);
+
+    document.getElementById('sv-rev').textContent  = '$' + avgRev.toLocaleString();
+    document.getElementById('sv-cost').textContent = '$' + execCost;
+    document.getElementById('sv-disc').textContent = discPct + '%';
+
+    try {
+      const res = await fetch('/api/scenario', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avg_annual_revenue: avgRev, exec_cost: execCost, discount_pct: discPct }),
+      });
+      const sc = await res.json();
+      scenarioCache = sc;
+      renderScenario(sc, dashboardData?.summary?.segments, dashboardData?.summary?.high_risk_count);
+    } catch (err) {
+      console.error('Scenario update failed:', err);
+    }
+  }
+
+  function renderScenario(sc, segs, totalAtRisk) {
+    if (!sc || !segs) return;
+
+    const avgRev  = parseInt(document.getElementById('sl-rev').value)  || 2400;
+    const execCst = parseInt(document.getElementById('sl-cost').value) || 15;
+    const discPct = parseInt(document.getElementById('sl-disc').value) || 20;
+
+    // Formula equation
+    document.getElementById('sc-invest-eq').textContent =
+      `= (${totalAtRisk} × $${execCst}) + (${segs.critical.count} × $200 × ${discPct}%)` +
+      ` = $${sc.investment.execution.toLocaleString()} + $${sc.investment.discounts.toLocaleString()}`;
+    document.getElementById('sc-total-invest').textContent = fmt$(sc.investment.total);
+
+    // Recovery table
+    const rows = [
+      { label:'Critical', cls:'critical', count: segs.critical.count, rev: sc.revenue_recoverable.critical, rate:'15%' },
+      { label:'High',     cls:'high',     count: segs.high.count,     rev: sc.revenue_recoverable.high,     rate:'25%' },
+      { label:'Medium',   cls:'medium',   count: segs.medium.count,   rev: sc.revenue_recoverable.medium,   rate:'35%' },
+    ];
+    document.getElementById('sc-recovery-rows').innerHTML = rows.map(r => `
+      <tr>
+        <td><span class="badge badge-${r.cls}">${r.label}</span></td>
+        <td>${r.count.toLocaleString()}</td>
+        <td style="font-size:0.78rem;color:#666;">${r.count} × $${avgRev.toLocaleString()} × ${r.rate}</td>
+        <td class="rev-value">${fmt$(r.rev)}</td>
+      </tr>`).join('') + `<tr>
+        <td colspan="3" style="font-weight:700;">Total</td>
+        <td class="rev-value" style="font-size:0.95rem;">${fmt$(sc.revenue_recoverable.total)}</td>
+      </tr>`;
+
+    // ROI row
+    document.getElementById('sc-roi-invest').textContent = fmt$(sc.investment.total);
+    document.getElementById('sc-roi-rev').textContent    = fmt$(sc.revenue_recoverable.total);
+    document.getElementById('sc-roi-val').textContent    = sc.roi + 'x';
+  }
+
+  // ── Explain a Customer (Page 4) ─────────────────────────────────────────────
+  async function runExplain() {
+    const input = document.getElementById('explainInput').value.trim();
+    if (!input) return;
+
+    const btn    = document.getElementById('explainBtn');
+    const result = document.getElementById('explainResult');
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Loading…';
+    result.classList.remove('visible');
+
+    try {
+      const res  = await fetch('/api/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_id: input }),
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        alert(data.error);
+        return;
+      }
+
+      const cls = segClass(data.segment);
+      document.getElementById('er-cid').textContent        = data.customer_id;
+      document.getElementById('er-badge').className        = `badge badge-${cls}`;
+      document.getElementById('er-badge').textContent      = `${data.segment} — ${(data.churn_score*100).toFixed(0)}% churn probability`;
+      document.getElementById('er-explanation').textContent = data.explanation;
+      document.getElementById('er-action-title').textContent = data.recommended_action;
+      document.getElementById('er-action-ctx').textContent   = data.action_context;
+
+      document.getElementById('er-signals').innerHTML = (data.signals || []).map(sig => `
+        <div class="signal-item">
+          <div class="signal-dot ${sig.severity}"></div>
+          <div>
+            <div class="signal-label">${escHtml(sig.label)}</div>
+          </div>
+          <div class="signal-value">${escHtml(sig.value)}</div>
+        </div>`).join('');
+
+      result.classList.add('visible');
+    } catch (err) {
+      alert('Error loading explanation. Please try again.');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="ti ti-arrow-up-right"></i>Explain';
+    }
+  }
+
+  // ── Strategic questions / AI query ──────────────────────────────────────────
+  function setQuery(q) {
+    document.getElementById('queryInput').value = q;
+    submitQuery();
+  }
+
+  async function submitQuery() {
+    const input    = document.getElementById('queryInput');
+    const question = input.value.trim();
+    if (!question) return;
+
+    const btn  = document.getElementById('queryBtn');
+    const area = document.getElementById('responseArea');
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+    area.innerHTML = '<div class="response-empty"><span class="spinner dark"></span> Analyzing…</div>';
+
+    try {
+      const res  = await fetch('/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+      });
+      const data = await res.json();
+
+      const chips = (data.sources || [])
+        .map(s => `<span class="source-chip"><i class="ti ti-database"></i>${escHtml(s)}</span>`)
+        .join('');
+
+      area.innerHTML = `
+        <div class="response-answer">${escHtml(data.answer)}</div>
+        <div class="source-chips">${chips}</div>`;
+    } catch {
+      area.innerHTML = '<div class="response-empty" style="color:#ef4444;">Error connecting to AI. Please try again.</div>';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Ask ↗';
+    }
+  }
+
+  // ── Init ────────────────────────────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', loadDashboard);
+</script>
+</body>
+</html>
