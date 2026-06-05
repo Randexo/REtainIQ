@@ -464,6 +464,37 @@
     .rmb-sublabel { font-size: 0.59rem; color: #ccc; line-height: 1.3; margin-top: 1px; }
     .rev-model-op { font-size: 1.1rem; color: #bbb; flex-shrink: 0; }
 
+    /* ── Revenue model flyout tooltip ── */
+    .has-tooltip { position: relative; cursor: help; }
+    .rmb-tooltip {
+      display: none; position: absolute;
+      top: calc(100% + 10px); left: 50%; transform: translateX(-50%);
+      width: 272px; background: #fff;
+      border: 0.5px solid rgba(0,0,0,0.1); border-radius: 10px;
+      box-shadow: 0 10px 32px rgba(0,0,0,0.13);
+      padding: 14px 16px; z-index: 200;
+      pointer-events: none; text-align: left;
+    }
+    .rmb-tooltip::before {
+      content: ''; position: absolute;
+      bottom: 100%; left: 50%; transform: translateX(-50%);
+      border: 6px solid transparent; border-bottom-color: rgba(0,0,0,0.08);
+    }
+    .rmb-tooltip::after {
+      content: ''; position: absolute;
+      bottom: calc(100% - 1px); left: 50%; transform: translateX(-50%);
+      border: 6px solid transparent; border-bottom-color: #fff;
+    }
+    .has-tooltip:hover .rmb-tooltip { display: block; }
+    .rmb-tt-title   { font-size: 0.78rem; font-weight: 700; margin-bottom: 8px; color: var(--text-primary); }
+    .rmb-tt-formula {
+      font-family: monospace; font-size: 0.74rem; background: #fafaf8;
+      border-left: 2px solid var(--sidebar-bg); border-radius: 0 4px 4px 0;
+      padding: 6px 10px; margin-bottom: 10px; color: #555; line-height: 1.5;
+    }
+    .rmb-tt-section { font-size: 0.63rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #ccc; margin: 10px 0 4px; }
+    .rmb-tt-body    { font-size: 0.74rem; color: #666; line-height: 1.55; }
+
     /* ── Spinner ── */
     .spinner {
       display: inline-block; width: 14px; height: 14px;
@@ -534,10 +565,19 @@
           <div class="rmb-label">customers<br>monitored</div>
         </div>
         <div class="rev-model-op">×</div>
-        <div class="rev-model-box">
+        <div class="rev-model-box has-tooltip">
           <div class="rmb-value loading-dash" id="rm-rate">—</div>
           <div class="rmb-label">predicted<br>churn rate</div>
-          <div class="rmb-sublabel">ML model output</div>
+          <div class="rmb-sublabel">ML model output ⓘ</div>
+          <div class="rmb-tooltip">
+            <div class="rmb-tt-title">How this rate is calculated</div>
+            <div class="rmb-tt-formula" id="rm-rate-formula">— at-risk ÷ — monitored = —%</div>
+            <div class="rmb-tt-body">The XGBoost model assigns a churn probability to every active customer. Those scoring ≥ 50% are flagged as at-risk. The rate shown is simply that count divided by all monitored customers.</div>
+            <div class="rmb-tt-section">Training data</div>
+            <div class="rmb-tt-body">Kaggle E-Commerce Dataset — real transaction data from an Indian e-commerce platform. 5,630 customers · 12 months of behavioral history · 13 features: days inactive, satisfaction score, complaints, order count, app engagement, cashback usage, and more.</div>
+            <div class="rmb-tt-section">In production</div>
+            <div class="rmb-tt-body">Model retrains weekly on live CRM data. Rate auto-updates every Sunday at 2 AM.</div>
+          </div>
         </div>
         <div class="rev-model-op">=</div>
         <div class="rev-model-box">
@@ -986,21 +1026,25 @@
     }
   }
 
-  function renderRevenueModel(s, segs, sc) {
+  function renderRevenueModel(s, segs, sc, avgRevOverride) {
     const churnRate = (s.high_risk_count / s.total_customers * 100).toFixed(1) + '%';
-    const avgRev    = s.default_assumptions?.avg_annual_revenue ?? 2400;
-    const wtdRec    = s.high_risk_count > 0
-      ? ((segs.critical.count * 0.15 + segs.high.count * 0.25 + segs.medium.count * 0.35)
-          / s.high_risk_count * 100).toFixed(0) + '%'
+    const avgRev    = avgRevOverride ?? s.default_assumptions?.avg_annual_revenue ?? 2400;
+    const revAtRisk = s.high_risk_count * avgRev;
+    const wtdRec    = revAtRisk > 0
+      ? (sc.revenue_recoverable.total / revAtRisk * 100).toFixed(0) + '%'
       : '—';
 
-    document.getElementById('rm-total').textContent      = s.total_customers.toLocaleString();
-    document.getElementById('rm-rate').textContent       = churnRate;
-    document.getElementById('rm-atrisk').textContent     = s.high_risk_count.toLocaleString();
-    document.getElementById('rm-avgrev').textContent     = '$' + avgRev.toLocaleString();
-    document.getElementById('rm-revlost').textContent    = fmt$(s.revenue_at_risk);
-    document.getElementById('rm-recovery').textContent   = wtdRec;
+    document.getElementById('rm-total').textContent       = s.total_customers.toLocaleString();
+    document.getElementById('rm-rate').textContent        = churnRate;
+    document.getElementById('rm-atrisk').textContent      = s.high_risk_count.toLocaleString();
+    document.getElementById('rm-avgrev').textContent      = '$' + avgRev.toLocaleString();
+    document.getElementById('rm-revlost').textContent     = fmt$(revAtRisk);
+    document.getElementById('rm-recovery').textContent    = wtdRec;
     document.getElementById('rm-recoverable').textContent = fmt$(sc.revenue_recoverable.total);
+
+    const formula = document.getElementById('rm-rate-formula');
+    if (formula) formula.textContent =
+      `${s.high_risk_count.toLocaleString()} at-risk ÷ ${s.total_customers.toLocaleString()} monitored = ${churnRate}`;
 
     ['rm-total','rm-rate','rm-atrisk','rm-revlost','rm-recovery','rm-recoverable']
       .forEach(id => document.getElementById(id).classList.remove('loading-dash'));
@@ -1147,6 +1191,11 @@
     document.getElementById('sc-roi-invest').textContent = fmt$(sc.investment.total);
     document.getElementById('sc-roi-rev').textContent    = fmt$(sc.revenue_recoverable.total);
     document.getElementById('sc-roi-val').textContent    = sc.roi + 'x';
+
+    // Sync revenue model card on Page 1 with current avg revenue
+    if (dashboardData) {
+      renderRevenueModel(dashboardData.summary, segs, sc, avgRev);
+    }
   }
 
   // ── Pre-Call Brief (Page 4) ──────────────────────────────────────────────────
