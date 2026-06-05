@@ -437,6 +437,33 @@
     }
     .modal-cutoff-box strong { font-weight: 700; }
 
+    /* ── Revenue model card ── */
+    .rev-model-card {
+      background: var(--card-bg); border: 0.5px solid var(--border);
+      border-left: 3px solid var(--sidebar-bg);
+      border-radius: 12px; padding: 18px 22px; margin-bottom: 20px;
+    }
+    .rev-model-label {
+      font-size: 0.64rem; font-weight: 700; letter-spacing: 0.11em;
+      text-transform: uppercase; color: var(--text-muted); margin-bottom: 14px;
+    }
+    .rev-model-chain {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .rev-model-box {
+      background: #f5f4f0; border-radius: 8px; padding: 9px 14px;
+      text-align: center; min-width: 84px;
+    }
+    .rev-model-box.blue  { background: #eff6ff; border: 0.5px solid rgba(59,130,246,0.25); }
+    .rev-model-box.red   { background: #fef2f2; border: 0.5px solid rgba(239,68,68,0.25); }
+    .rev-model-box.green { background: #f0fdf4; border: 0.5px solid rgba(34,197,94,0.25); }
+    .rmb-value    { font-size: 1.05rem; font-weight: 700; color: var(--text-primary); margin-bottom: 2px; }
+    .rmb-value.red   { color: var(--red); }
+    .rmb-value.green { color: #16a34a; }
+    .rmb-label    { font-size: 0.63rem; color: var(--text-muted); line-height: 1.4; }
+    .rmb-sublabel { font-size: 0.59rem; color: #ccc; line-height: 1.3; margin-top: 1px; }
+    .rev-model-op { font-size: 1.1rem; color: #bbb; flex-shrink: 0; }
+
     /* ── Spinner ── */
     .spinner {
       display: inline-block; width: 14px; height: 14px;
@@ -497,6 +524,50 @@
     <div class="page-header">
       <h1>Revenue at Risk</h1>
       <p>Customers predicted to leave in the next 30 days — still active, still recoverable</p>
+    </div>
+
+    <div class="rev-model-card">
+      <div class="rev-model-label">Revenue model — basis for all financial calculations</div>
+      <div class="rev-model-chain">
+        <div class="rev-model-box blue">
+          <div class="rmb-value loading-dash" id="rm-total">—</div>
+          <div class="rmb-label">customers<br>monitored</div>
+        </div>
+        <div class="rev-model-op">×</div>
+        <div class="rev-model-box">
+          <div class="rmb-value loading-dash" id="rm-rate">—</div>
+          <div class="rmb-label">predicted<br>churn rate</div>
+          <div class="rmb-sublabel">ML model output</div>
+        </div>
+        <div class="rev-model-op">=</div>
+        <div class="rev-model-box">
+          <div class="rmb-value loading-dash" id="rm-atrisk">—</div>
+          <div class="rmb-label">at-risk<br>customers</div>
+        </div>
+        <div class="rev-model-op">×</div>
+        <div class="rev-model-box blue">
+          <div class="rmb-value" id="rm-avgrev">$2,400</div>
+          <div class="rmb-label">avg. annual<br>revenue / customer</div>
+          <div class="rmb-sublabel">assumption — adjust in Retention Plan</div>
+        </div>
+        <div class="rev-model-op">=</div>
+        <div class="rev-model-box red">
+          <div class="rmb-value red loading-dash" id="rm-revlost">—</div>
+          <div class="rmb-label">revenue<br>at risk</div>
+          <div class="rmb-sublabel">annualized</div>
+        </div>
+        <div class="rev-model-op">×</div>
+        <div class="rev-model-box">
+          <div class="rmb-value loading-dash" id="rm-recovery">—</div>
+          <div class="rmb-label">weighted avg.<br>recovery rate</div>
+          <div class="rmb-sublabel">Critical 15% · High 25% · Medium 35%</div>
+        </div>
+        <div class="rev-model-op">=</div>
+        <div class="rev-model-box green">
+          <div class="rmb-value green loading-dash" id="rm-recoverable">—</div>
+          <div class="rmb-label">recoverable<br>if program runs</div>
+        </div>
+      </div>
     </div>
 
     <div class="metrics-row">
@@ -896,6 +967,7 @@
       document.getElementById('m-revenue').textContent     = fmt$(s.revenue_at_risk);
       document.getElementById('m-recoverable').textContent = fmt$(sc.revenue_recoverable.total);
 
+      renderRevenueModel(s, segs, sc);
       renderSegmentBars(segs);
       renderDriverBars(dashboardData.top_churn_drivers);
       renderCustomerTable(dashboardData.customers_at_risk);
@@ -912,6 +984,26 @@
     } catch (err) {
       console.error('Dashboard load failed:', err);
     }
+  }
+
+  function renderRevenueModel(s, segs, sc) {
+    const churnRate = (s.high_risk_count / s.total_customers * 100).toFixed(1) + '%';
+    const avgRev    = s.default_assumptions?.avg_annual_revenue ?? 2400;
+    const wtdRec    = s.high_risk_count > 0
+      ? ((segs.critical.count * 0.15 + segs.high.count * 0.25 + segs.medium.count * 0.35)
+          / s.high_risk_count * 100).toFixed(0) + '%'
+      : '—';
+
+    document.getElementById('rm-total').textContent      = s.total_customers.toLocaleString();
+    document.getElementById('rm-rate').textContent       = churnRate;
+    document.getElementById('rm-atrisk').textContent     = s.high_risk_count.toLocaleString();
+    document.getElementById('rm-avgrev').textContent     = '$' + avgRev.toLocaleString();
+    document.getElementById('rm-revlost').textContent    = fmt$(s.revenue_at_risk);
+    document.getElementById('rm-recovery').textContent   = wtdRec;
+    document.getElementById('rm-recoverable').textContent = fmt$(sc.revenue_recoverable.total);
+
+    ['rm-total','rm-rate','rm-atrisk','rm-revlost','rm-recovery','rm-recoverable']
+      .forEach(id => document.getElementById(id).classList.remove('loading-dash'));
   }
 
   function renderSegmentBars(segs) {
