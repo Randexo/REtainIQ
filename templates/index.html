@@ -302,12 +302,20 @@
     .signal-value { color: var(--text-secondary); margin-left: auto; text-align: right; }
 
     .action-box {
-      background: #fffbeb; border: 1px solid #fde68a;
+      background: #fffbeb; border: 1px solid #f59e0b;
       border-radius: 8px; padding: 12px 14px;
     }
     .action-box-label { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #92400e; margin-bottom: 4px; }
-    .action-box-title { font-size: 0.86rem; font-weight: 700; color: #78350f; margin-bottom: 4px; }
+    .action-box-title { font-size: 0.9rem; font-weight: 700; color: #78350f; margin-bottom: 6px; }
     .action-box-ctx   { font-size: 0.8rem; color: #92400e; line-height: 1.55; }
+
+    .explain-hint {
+      font-size: 0.78rem; color: var(--text-muted);
+      margin-bottom: 14px; display: flex; align-items: center; gap: 6px;
+    }
+    .explain-hint a { color: var(--sidebar-bg); text-decoration: none; font-weight: 600; }
+    .explain-hint a:hover { text-decoration: underline; }
+    .explain-hint .ti { font-size: 0.88rem; }
 
     /* ── Strategic questions ── */
     .quick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
@@ -406,7 +414,7 @@
   <div class="sidebar-section">
     <div class="sidebar-section-label">AI Tools</div>
     <div class="sidebar-item" id="nav-explain" onclick="navigate('explain')">
-      <i class="ti ti-search"></i>Explain a Customer
+      <i class="ti ti-id-badge-2"></i>Agent Brief
     </div>
   </div>
 
@@ -606,26 +614,28 @@
     </div>
   </div>
 
-  <!-- ─────────── Page 4: Explain a Customer ─────────── -->
+  <!-- ─────────── Page 4: Pre-Call Brief ─────────── -->
   <div class="page" id="page-explain">
     <div class="page-header">
-      <h1>Explain a Customer</h1>
-      <p>Enter a customer ID to understand exactly why they're at risk — and what to do about it</p>
+      <h1>Pre-Call Brief</h1>
+      <p>Enter a customer ID to get a 30-second brief before calling — what's driving their risk and exactly what to say</p>
     </div>
 
     <!-- Section 1: Customer explanation -->
     <div class="explain-section">
-      <div class="explain-section-title">Customer explanation</div>
-      <div class="explain-section-sub">The model breaks down which signals drove this customer's churn score — so your team knows what to say before picking up the phone</div>
+      <div class="explain-section-title">Customer briefing</div>
+      <div class="explain-section-sub">Enter a customer ID from the At-Risk table — the AI explains which signals drove their score and gives the agent a specific opening line for the call</div>
 
       <div class="explain-input-row">
         <input class="explain-input" id="explainInput" type="text"
           placeholder="Enter customer ID, e.g. #10035"
           onkeydown="if(event.key==='Enter') runExplain()" />
         <button class="primary-btn" id="explainBtn" onclick="runExplain()">
-          <i class="ti ti-arrow-up-right"></i>Explain
+          <i class="ti ti-arrow-up-right"></i>Brief
         </button>
       </div>
+
+      <div class="explain-hint" id="explainHint"><i class="ti ti-info-circle"></i>Try customer <a href="#" onclick="document.getElementById('explainInput').value='#11376'; return false;">#11376</a> — a Critical customer from the at-risk table</div>
 
       <div class="explain-result" id="explainResult">
         <div class="explain-result-header">
@@ -646,8 +656,8 @@
 
     <!-- Section 2: Strategic questions -->
     <div class="explain-section">
-      <div class="explain-section-title">Strategic questions</div>
-      <div class="explain-section-sub">Business-level questions the dashboard can't answer with a chart</div>
+      <div class="explain-section-title">AI Analyst</div>
+      <div class="explain-section-sub">Ask the model anything about your at-risk pool — the AI answers with your live data, not generic advice</div>
 
       <div class="quick-grid">
         <button class="quick-btn" onclick="setQuery('If I have budget for 200 interventions this week — which 200 customers do I call first to maximize retained revenue?')">
@@ -886,7 +896,7 @@
     document.getElementById('sc-roi-val').textContent    = sc.roi + 'x';
   }
 
-  // ── Explain a Customer (Page 4) ─────────────────────────────────────────────
+  // ── Pre-Call Brief (Page 4) ──────────────────────────────────────────────────
   async function runExplain() {
     const input = document.getElementById('explainInput').value.trim();
     if (!input) return;
@@ -928,12 +938,13 @@
           <div class="signal-value">${escHtml(sig.value)}</div>
         </div>`).join('');
 
+      document.getElementById('explainHint').style.display = 'none';
       result.classList.add('visible');
     } catch (err) {
       alert('Error loading explanation. Please try again.');
     } finally {
       btn.disabled = false;
-      btn.innerHTML = '<i class="ti ti-arrow-up-right"></i>Explain';
+      btn.innerHTML = '<i class="ti ti-arrow-up-right"></i>Brief';
     }
   }
 

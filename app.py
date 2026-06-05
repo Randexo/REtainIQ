@@ -36,19 +36,19 @@ FEATURE_COLS = [
 ]
 
 FEATURE_LABELS = {
-    "DaySinceLastOrder":          "Days since last order",
-    "SatisfactionScore":          "Satisfaction score",
-    "Complain":                   "Complaint filed",
-    "OrderAmountHikeFromlastYear":"Order value drop YoY",
-    "CashbackAmount":             "Cashback not redeemed",
-    "Tenure":                     "Customer tenure",
-    "NumberOfDeviceRegistered":   "Devices registered",
-    "HourSpendOnApp":             "App engagement",
-    "NumberOfAddress":            "Addresses saved",
-    "OrderCount":                 "Order frequency",
-    "CouponUsed":                 "Coupon usage",
-    "CityTier":                   "City tier",
-    "WarehouseToHome":            "Delivery distance",
+    "DaySinceLastOrder":           "Days since last order",
+    "SatisfactionScore":           "Satisfaction score",
+    "Complain":                    "Complaint filed",
+    "OrderAmountHikeFromlastYear": "Order value drop YoY",
+    "CashbackAmount":              "Cashback not redeemed",
+    "Tenure":                      "Customer tenure",
+    "NumberOfDeviceRegistered":    "Devices registered",
+    "HourSpendOnApp":              "App engagement",
+    "NumberOfAddress":             "Addresses saved",
+    "OrderCount":                  "Order frequency",
+    "CouponUsed":                  "Coupon usage",
+    "CityTier":                    "City tier",
+    "WarehouseToHome":             "Delivery distance",
 }
 
 
@@ -100,21 +100,21 @@ def generate_synthetic_data(n=5630):
     order_count = order_count.round().astype(int)
 
     return pd.DataFrame({
-        "CustomerID":                   range(10001, 10001 + n),
-        "Churn":                        churn,
-        "Tenure":                       tenure_base,
-        "SatisfactionScore":            sat_base,
-        "Complain":                     complain_base,
-        "NumberOfDeviceRegistered":     np.random.randint(1, 7, n),
-        "DaySinceLastOrder":            days_base,
-        "CashbackAmount":               cashback_base,
-        "OrderAmountHikeFromlastYear":  order_hike,
-        "HourSpendOnApp":               np.random.randint(0, 6, n),
-        "NumberOfAddress":              np.random.randint(1, 8, n),
-        "OrderCount":                   order_count,
-        "CouponUsed":                   np.random.randint(0, 10, n),
-        "CityTier":                     np.random.choice([1, 2, 3], n, p=[0.45, 0.30, 0.25]),
-        "WarehouseToHome":              np.random.randint(5, 40, n),
+        "CustomerID":                  range(10001, 10001 + n),
+        "Churn":                       churn,
+        "Tenure":                      tenure_base,
+        "SatisfactionScore":           sat_base,
+        "Complain":                    complain_base,
+        "NumberOfDeviceRegistered":    np.random.randint(1, 7, n),
+        "DaySinceLastOrder":           days_base,
+        "CashbackAmount":              cashback_base,
+        "OrderAmountHikeFromlastYear": order_hike,
+        "HourSpendOnApp":              np.random.randint(0, 6, n),
+        "NumberOfAddress":             np.random.randint(1, 8, n),
+        "OrderCount":                  order_count,
+        "CouponUsed":                  np.random.randint(0, 10, n),
+        "CityTier":                    np.random.choice([1, 2, 3], n, p=[0.45, 0.30, 0.25]),
+        "WarehouseToHome":             np.random.randint(5, 40, n),
     })
 
 
@@ -148,24 +148,18 @@ def train_model(df):
     y = df["Churn"]
     X_train, _, y_train, _ = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
+    # max_depth=3 for XGB (depth=4 overfit synthetic data → bimodal 0/1 probabilities)
     if USE_XGB:
-        model = XGBClassifier(n_estimators=100, max_depth=4, random_state=42,
-                               eval_metric="logloss", learning_rate=0.08,
-                               subsample=0.8, colsample_bytree=0.8)
+        model = XGBClassifier(n_estimators=100, max_depth=3, random_state=42,
+                              eval_metric="logloss", learning_rate=0.08,
+                              subsample=0.8, colsample_bytree=0.8)
     else:
-        model = RandomForestClassifier(n_estimators=100, max_depth=6, random_state=42,
-                                        n_jobs=-1, min_samples_leaf=8)
+        model = RandomForestClassifier(n_estimators=100, max_depth=4, random_state=42,
+                                       n_jobs=-1, min_samples_leaf=8)
 
     model.fit(X_train, y_train)
     importances = dict(zip(available, model.feature_importances_))
     return model, importances, available
-
-
-def get_segment(score):
-    if score >= 0.85: return "Critical"
-    if score >= 0.75: return "High"
-    if score >= 0.60: return "Medium"
-    return "Low"
 
 
 # ── Dashboard computation ──────────────────────────────────────────────────────
@@ -175,20 +169,39 @@ def compute_dashboard(df, model, importances, features):
     scores = model.predict_proba(X)[:, 1]
     df = df.copy()
     df["churn_score"] = scores
-    df["segment"] = df["churn_score"].apply(get_segment)
 
-    high_risk = df[df["churn_score"] >= 0.60]
+    high_risk = df[df["churn_score"] >= 0.50].copy()
     total     = len(df)
     hr_count  = len(high_risk)
 
+    # Percentile-based segments within the at-risk pool.
+    # Fixed thresholds produce ~92% Critical on synthetic data because the model
+    # is confident — percentiles guarantee the intended ~15/25/60 split regardless
+    # of absolute probability values.
+    if hr_count > 0:
+        p85 = float(high_risk["churn_score"].quantile(0.85))
+        p60 = float(high_risk["churn_score"].quantile(0.60))
+
+        def _seg(s):
+            if s >= p85: return "Critical"
+            if s >= p60: return "High"
+            return "Medium"
+
+        high_risk["segment"] = high_risk["churn_score"].apply(_seg)
+    else:
+        def _seg(_): return "Medium"
+
     seg_data = {}
-    for seg, lo, hi in [("Critical", 0.85, 2.0), ("High", 0.75, 0.85), ("Medium", 0.60, 0.75)]:
-        sdf = df[(df["churn_score"] >= lo) & (df["churn_score"] < hi)]
-        count   = len(sdf)
-        revenue = count * AVG_ANNUAL_REVENUE
+    for seg, lo, hi in [
+        ("Critical", p85 if hr_count > 0 else 0.85, 2.0),
+        ("High",     p60 if hr_count > 0 else 0.60, p85 if hr_count > 0 else 0.85),
+        ("Medium",   0.50, p60 if hr_count > 0 else 0.60),
+    ]:
+        sdf   = high_risk[high_risk["segment"] == seg]
+        count = len(sdf)
         seg_data[seg.lower()] = {
             "count":         count,
-            "revenue":       revenue,
+            "revenue":       count * AVG_ANNUAL_REVENUE,
             "avg_score":     round(float(sdf["churn_score"].mean()), 2) if count else 0.0,
             "recovery_rate": RECOVERY_RATES[seg],
         }
@@ -206,7 +219,6 @@ def compute_dashboard(df, model, importances, features):
         "Medium":   "Re-engagement campaign",
     }
 
-    # All at-risk customers for table (sorted by score desc)
     at_risk_rows = []
     for _, row in high_risk.sort_values("churn_score", ascending=False).iterrows():
         seg = row["segment"]
@@ -224,27 +236,26 @@ def compute_dashboard(df, model, importances, features):
             "order_hike":         round(float(row.get("OrderAmountHikeFromlastYear", 0)), 1),
         })
 
-    # Default scenario financials
-    exec_cost     = hr_count * COST_PER_INTERVENTION
-    crit_count    = seg_data["critical"]["count"]
-    disc_cost     = crit_count * AVG_ORDER_VALUE * 0.20
-    total_invest  = exec_cost + disc_cost
-    rev_critical  = crit_count * AVG_ANNUAL_REVENUE * RECOVERY_RATES["Critical"]
-    rev_high      = seg_data["high"]["count"] * AVG_ANNUAL_REVENUE * RECOVERY_RATES["High"]
-    rev_medium    = seg_data["medium"]["count"] * AVG_ANNUAL_REVENUE * RECOVERY_RATES["Medium"]
-    rev_total     = rev_critical + rev_high + rev_medium
-    roi           = round(rev_total / total_invest, 1) if total_invest > 0 else 0.0
+    exec_cost    = hr_count * COST_PER_INTERVENTION
+    crit_count   = seg_data["critical"]["count"]
+    disc_cost    = crit_count * AVG_ORDER_VALUE * 0.20
+    total_invest = exec_cost + disc_cost
+    rev_critical = crit_count * AVG_ANNUAL_REVENUE * RECOVERY_RATES["Critical"]
+    rev_high     = seg_data["high"]["count"]   * AVG_ANNUAL_REVENUE * RECOVERY_RATES["High"]
+    rev_medium   = seg_data["medium"]["count"] * AVG_ANNUAL_REVENUE * RECOVERY_RATES["Medium"]
+    rev_total    = rev_critical + rev_high + rev_medium
+    roi          = round(rev_total / total_invest, 1) if total_invest > 0 else 0.0
 
     return {
         "summary": {
-            "total_customers":     total,
-            "high_risk_count":     hr_count,
-            "revenue_at_risk":     revenue_at_risk,
+            "total_customers":  total,
+            "high_risk_count":  hr_count,
+            "revenue_at_risk":  revenue_at_risk,
             "default_assumptions": {
-                "avg_annual_revenue":       AVG_ANNUAL_REVENUE,
+                "avg_annual_revenue":         AVG_ANNUAL_REVENUE,
                 "exec_cost_per_intervention": COST_PER_INTERVENTION,
-                "critical_discount_pct":    20,
-                "avg_order_value":          AVG_ORDER_VALUE,
+                "critical_discount_pct":      20,
+                "avg_order_value":            AVG_ORDER_VALUE,
             },
             "segments": seg_data,
             "scenario": {
@@ -253,7 +264,7 @@ def compute_dashboard(df, model, importances, features):
                 "roi":                 roi,
             },
         },
-        "top_churn_drivers": top_drivers,
+        "top_churn_drivers":  top_drivers,
         "customers_at_risk":  at_risk_rows,
     }
 
@@ -269,7 +280,7 @@ MODEL_NAME = "XGBoost" if USE_XGB else "Random Forest"
 print(f"  {MODEL_NAME} trained on {len(FEATURES)} features")
 
 DASHBOARD_CACHE = compute_dashboard(DF, MODEL, IMPORTANCES, FEATURES)
-s = DASHBOARD_CACHE["summary"]
+s    = DASHBOARD_CACHE["summary"]
 segs = s["segments"]
 print(f"  Dashboard ready — {s['high_risk_count']:,} at-risk | "
       f"Critical: {segs['critical']['count']} | "
@@ -296,22 +307,22 @@ def scenario():
     exec_cost_u = float(data.get("exec_cost", COST_PER_INTERVENTION))
     disc_pct    = float(data.get("discount_pct", 20)) / 100
 
-    segs        = DASHBOARD_CACHE["summary"]["segments"]
-    crit_count  = segs["critical"]["count"]
-    high_count  = segs["high"]["count"]
-    med_count   = segs["medium"]["count"]
+    segs         = DASHBOARD_CACHE["summary"]["segments"]
+    crit_count   = segs["critical"]["count"]
+    high_count   = segs["high"]["count"]
+    med_count    = segs["medium"]["count"]
     total_at_risk = DASHBOARD_CACHE["summary"]["high_risk_count"]
 
-    execution   = round(total_at_risk * exec_cost_u)
-    discounts   = round(crit_count * AVG_ORDER_VALUE * disc_pct)
-    total_inv   = execution + discounts
+    execution  = round(total_at_risk * exec_cost_u)
+    discounts  = round(crit_count * AVG_ORDER_VALUE * disc_pct)
+    total_inv  = execution + discounts
 
-    rev_crit    = round(crit_count * avg_rev * RECOVERY_RATES["Critical"])
-    rev_high    = round(high_count * avg_rev * RECOVERY_RATES["High"])
-    rev_med     = round(med_count  * avg_rev * RECOVERY_RATES["Medium"])
-    rev_total   = rev_crit + rev_high + rev_med
+    rev_crit = round(crit_count * avg_rev * RECOVERY_RATES["Critical"])
+    rev_high = round(high_count * avg_rev * RECOVERY_RATES["High"])
+    rev_med  = round(med_count  * avg_rev * RECOVERY_RATES["Medium"])
+    rev_total = rev_crit + rev_high + rev_med
 
-    roi         = round(rev_total / total_inv, 1) if total_inv > 0 else 0.0
+    roi = round(rev_total / total_inv, 1) if total_inv > 0 else 0.0
 
     return jsonify({
         "investment":          {"execution": execution, "discounts": discounts, "total": total_inv},
@@ -324,8 +335,8 @@ def scenario():
 
 @app.route("/api/intervene", methods=["POST"])
 def intervene():
-    data = request.get_json()
-    cid  = data.get("customer_id")
+    data    = request.get_json()
+    cid     = data.get("customer_id")
     segment = data.get("segment", "High")
 
     customer = next((c for c in DASHBOARD_CACHE["customers_at_risk"] if c["customer_id"] == cid), None)
@@ -351,7 +362,7 @@ Customer #{cid}:
 
 @app.route("/api/explain", methods=["POST"])
 def explain():
-    data = request.get_json() or {}
+    data   = request.get_json() or {}
     raw_id = str(data.get("customer_id", "")).replace("#", "").strip()
 
     try:
@@ -364,7 +375,7 @@ def explain():
         return jsonify({"error": f"Customer #{cid} not found in at-risk list"}), 404
 
     c = customer
-    prompt = f"""You are a customer success AI explaining churn risk to a retention agent.
+    prompt = f"""You are a customer success AI briefing a retention agent before a call.
 In 2–3 sentences, explain plainly why Customer #{cid} is at risk of leaving, which signals are driving the score, and what the agent should prioritize when contacting them.
 Be specific, use the data below, and do not repeat the numbers verbatim — interpret them.
 
@@ -383,7 +394,6 @@ Write the explanation, then on a new line write "ACTION:" followed by 1 sentence
     response = gemini.generate_content(prompt)
     raw_text = response.text.strip()
 
-    # Split explanation from action guidance
     if "ACTION:" in raw_text:
         parts       = raw_text.split("ACTION:", 1)
         explanation = parts[0].strip()
@@ -392,7 +402,6 @@ Write the explanation, then on a new line write "ACTION:" followed by 1 sentence
         explanation = raw_text
         action_ctx  = c["recommended_action"]
 
-    # Build signal list from customer data
     signals = []
     if c["days_inactive"] > 20:
         signals.append({"label": "Days since last order", "value": f"{c['days_inactive']}d inactive", "severity": "critical" if c["days_inactive"] > 35 else "high"})
@@ -423,8 +432,8 @@ def query():
     if not question:
         return jsonify({"error": "Empty question"}), 400
 
-    s      = DASHBOARD_CACHE["summary"]
-    segs   = s["segments"]
+    s       = DASHBOARD_CACHE["summary"]
+    segs    = s["segments"]
     drivers = DASHBOARD_CACHE["top_churn_drivers"]
 
     context = f"""E-Commerce Churn Prevention — Live Model Context
