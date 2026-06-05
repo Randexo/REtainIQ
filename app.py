@@ -174,21 +174,30 @@ def compute_dashboard(df, model, importances, features):
     total     = len(df)
     hr_count  = len(high_risk)
 
-    # Percentile-based segments within the at-risk pool.
-    # Fixed thresholds produce ~92% Critical on synthetic data because the model
-    # is confident — percentiles guarantee the intended ~15/25/60 split regardless
-    # of absolute probability values.
-    if hr_count > 0:
-        p85 = float(high_risk["churn_score"].quantile(0.85))
-        p60 = float(high_risk["churn_score"].quantile(0.60))
+    # Composite urgency score: blends churn probability with observable signals
+    # so the displayed number visibly explains the segment label.
+    # Formula: churn×0.50 + inactivity×0.25 + complaint×0.15 + low_sat×0.10
+    def _urgency(row):
+        days_norm = min(float(row.get("DaySinceLastOrder", 0)) / 90.0, 1.0)
+        complaint = float(row.get("Complain", 0))
+        sat       = float(row.get("SatisfactionScore", 3))
+        low_sat   = 1.0 - (sat - 1.0) / 4.0  # sat 1→1.0, sat 5→0.0
+        return round(float(row["churn_score"]) * 0.50 + days_norm * 0.25
+                     + complaint * 0.15 + low_sat * 0.10, 3)
 
-        def _seg(s):
-            if s >= p85: return "Critical"
-            if s >= p60: return "High"
+    if hr_count > 0:
+        high_risk["urgency_score"] = high_risk.apply(_urgency, axis=1)
+        p85 = float(high_risk["urgency_score"].quantile(0.85))
+        p60 = float(high_risk["urgency_score"].quantile(0.60))
+
+        def _seg(u):
+            if u >= p85: return "Critical"
+            if u >= p60: return "High"
             return "Medium"
 
-        high_risk["segment"] = high_risk["churn_score"].apply(_seg)
+        high_risk["segment"] = high_risk["urgency_score"].apply(_seg)
     else:
+        high_risk["urgency_score"] = 0.0
         def _seg(_): return "Medium"
 
     seg_data = {}
@@ -202,7 +211,7 @@ def compute_dashboard(df, model, importances, features):
         seg_data[seg.lower()] = {
             "count":         count,
             "revenue":       count * AVG_ANNUAL_REVENUE,
-            "avg_score":     round(float(sdf["churn_score"].mean()), 2) if count else 0.0,
+            "avg_score":     round(float(sdf["urgency_score"].mean()), 2) if count else 0.0,
             "recovery_rate": RECOVERY_RATES[seg],
         }
 
@@ -220,11 +229,12 @@ def compute_dashboard(df, model, importances, features):
     }
 
     at_risk_rows = []
-    for _, row in high_risk.sort_values("churn_score", ascending=False).iterrows():
+    for _, row in high_risk.sort_values("urgency_score", ascending=False).iterrows():
         seg = row["segment"]
         at_risk_rows.append({
             "customer_id":        int(row.get("CustomerID", int(row.name) + 10001)),
             "churn_score":        round(float(row["churn_score"]), 3),
+            "urgency_score":      round(float(row["urgency_score"]), 3),
             "revenue_at_risk":    AVG_ANNUAL_REVENUE,
             "days_inactive":      int(row.get("DaySinceLastOrder", 0)),
             "satisfaction_score": int(row.get("SatisfactionScore", 3)),
@@ -266,6 +276,9 @@ def compute_dashboard(df, model, importances, features):
         },
         "top_churn_drivers":  top_drivers,
         "customers_at_risk":  at_risk_rows,
+        "urgency_weights": {
+            "churn_prob": 0.50, "inactivity": 0.25, "complaint": 0.15, "low_sat": 0.10
+        },
     }
 
 

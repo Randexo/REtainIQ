@@ -372,6 +372,71 @@
     }
     .disclaimer strong { font-weight: 700; }
 
+    /* ── Score info button ── */
+    .score-info-btn {
+      background: none; border: none; cursor: pointer;
+      color: #ccc; padding: 0 2px; line-height: 1;
+      vertical-align: middle; font-size: 0.85rem;
+      transition: color 0.15s;
+    }
+    .score-info-btn:hover { color: var(--sidebar-bg); }
+
+    /* ── Urgency modal ── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.38); z-index: 1000;
+      align-items: flex-start; justify-content: center;
+      padding-top: 60px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-panel {
+      background: #fff; border-radius: 16px;
+      width: 90%; max-width: 680px; max-height: 82vh;
+      overflow-y: auto; box-shadow: 0 24px 64px rgba(0,0,0,0.22);
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 24px 16px; border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; background: #fff; z-index: 1;
+    }
+    .modal-title { font-size: 1rem; font-weight: 700; }
+    .modal-close {
+      background: none; border: none; font-size: 1.5rem;
+      color: #aaa; cursor: pointer; padding: 0 4px; line-height: 1;
+      transition: color 0.12s;
+    }
+    .modal-close:hover { color: #333; }
+    .modal-body { padding: 20px 24px 24px; }
+    .modal-formula-block {
+      font-family: monospace; font-size: 0.82rem; color: #555;
+      background: #fafaf8; border-left: 3px solid var(--sidebar-bg);
+      border-radius: 0 8px 8px 0; padding: 12px 16px;
+      margin-bottom: 20px; line-height: 1.6;
+    }
+    .modal-section-title {
+      font-size: 0.82rem; font-weight: 700; color: var(--text-primary);
+      margin-bottom: 10px; margin-top: 20px;
+    }
+    .urgency-table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+    .urgency-table th {
+      font-size: 0.66rem; font-weight: 700; letter-spacing: 0.07em;
+      text-transform: uppercase; color: var(--text-muted);
+      text-align: left; padding: 8px 12px;
+      border-bottom: 1px solid var(--border); background: #fafaf8;
+    }
+    .urgency-table td {
+      padding: 10px 12px; font-size: 0.82rem;
+      border-bottom: 1px solid #f5f4f0; vertical-align: middle;
+    }
+    .urgency-table tr:last-child td { border-bottom: none; }
+    .urgency-weight-cell { font-size: 1.0rem; font-weight: 700; color: var(--text-primary); }
+    .modal-cutoff-box {
+      background: #fffbeb; border: 1px solid #f59e0b;
+      border-radius: 8px; padding: 11px 14px; margin-top: 18px;
+      font-size: 0.8rem; color: #78350f; line-height: 1.6;
+    }
+    .modal-cutoff-box strong { font-weight: 700; }
+
     /* ── Spinner ── */
     .spinner {
       display: inline-block; width: 14px; height: 14px;
@@ -593,7 +658,7 @@
         <thead>
           <tr>
             <th>Customer ID</th>
-            <th>Churn Score</th>
+            <th>Urgency Score <button class="score-info-btn" onclick="openUrgencyModal()" title="How urgency is calculated"><i class="ti ti-info-circle"></i></button></th>
             <th>Revenue at Risk</th>
             <th>Days Inactive</th>
             <th>Satisfaction</th>
@@ -688,6 +753,101 @@
   </div>
 
 </main>
+
+<!-- ── Urgency Score Modal ── -->
+<div class="modal-overlay" id="urgencyModal" onclick="closeUrgencyModal(event)">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <div class="modal-title">Urgency Score — How we rank at-risk customers</div>
+      <button class="modal-close" onclick="closeUrgencyModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+
+      <div class="modal-formula-block">
+        Score = Churn Probability × 0.50 + Inactivity × 0.25 + Complaint × 0.15 + (1 – Satisfaction/5) × 0.10
+      </div>
+
+      <div class="modal-section-title">Signal breakdown</div>
+      <table class="urgency-table">
+        <thead>
+          <tr>
+            <th>Signal</th>
+            <th>Why it matters</th>
+            <th>Weight</th>
+            <th>How it's measured</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Churn probability</strong></td>
+            <td style="color:#666;">ML model baseline — likelihood of leaving in 30 days</td>
+            <td class="urgency-weight-cell">50%</td>
+            <td style="color:#888;font-size:0.76rem;">XGBoost predict_proba output</td>
+          </tr>
+          <tr>
+            <td><strong>Inactivity</strong></td>
+            <td style="color:#666;">Days since last order — the strongest leading indicator</td>
+            <td class="urgency-weight-cell">25%</td>
+            <td style="color:#888;font-size:0.76rem;">days_inactive ÷ 90, capped at 1.0</td>
+          </tr>
+          <tr>
+            <td><strong>Complaint filed</strong></td>
+            <td style="color:#666;">Single strongest individual churn signal in the dataset</td>
+            <td class="urgency-weight-cell">15%</td>
+            <td style="color:#888;font-size:0.76rem;">Binary — 1 if complaint on record</td>
+          </tr>
+          <tr>
+            <td><strong>Low satisfaction</strong></td>
+            <td style="color:#666;">1-star customers churn 3× faster than 4-star customers</td>
+            <td class="urgency-weight-cell">10%</td>
+            <td style="color:#888;font-size:0.76rem;">Inverted &amp; normalized: 1 – (sat – 1) ÷ 4</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="modal-section-title">Segment thresholds</div>
+      <table class="urgency-table">
+        <thead>
+          <tr>
+            <th>Segment</th>
+            <th>Percentile within at-risk pool</th>
+            <th>Typical score range</th>
+            <th>Recommended action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge badge-critical">Critical</span></td>
+            <td>Top 15%</td>
+            <td style="color:#666;">~80–100%</td>
+            <td style="color:#666;">Priority call + 20% discount this week</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-high">High</span></td>
+            <td>16th–40th percentile</td>
+            <td style="color:#666;">~65–79%</td>
+            <td style="color:#666;">Email + cashback offer within 3 days</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-medium">Medium</span></td>
+            <td>Bottom 60%</td>
+            <td style="color:#666;">~50–64%</td>
+            <td style="color:#666;">Re-engagement campaign</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="modal-cutoff-box">
+        <strong>Percentile cutoffs, not fixed thresholds.</strong> Segments are computed within the at-risk pool on every model run — so the Critical/High/Medium distribution stays stable (~15/25/60) regardless of how confident the model is on any given day.
+      </div>
+
+      <div class="disclaimer" style="margin-top:12px;">
+        <strong>Weights are illustrative.</strong> In production, calibrate these against historical intervention outcomes — e.g., if inactivity turns out to be a stronger predictor of successful retention than model score, increase its weight.
+      </div>
+
+    </div>
+  </div>
+</div>
 
 <script>
   let dashboardData  = null;
@@ -788,8 +948,9 @@
     }
 
     document.getElementById('customerTableBody').innerHTML = customers.map(c => {
-      const cls   = segClass(c.segment);
-      const pct   = (c.churn_score * 100).toFixed(0);
+      const cls     = segClass(c.segment);
+      const urgency = c.urgency_score ?? c.churn_score;
+      const pct   = (urgency * 100).toFixed(1);
       const stars = '★'.repeat(c.satisfaction_score) +
                     '<span style="color:#e5e7eb">' + '★'.repeat(5 - c.satisfaction_score) + '</span>';
       const complaint = c.complain
@@ -988,6 +1149,20 @@
       btn.textContent = 'Ask ↗';
     }
   }
+
+  // ── Urgency modal ────────────────────────────────────────────────────────────
+  function openUrgencyModal() {
+    document.getElementById('urgencyModal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeUrgencyModal(e) {
+    if (e && e.target !== document.getElementById('urgencyModal')) return;
+    document.getElementById('urgencyModal').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeUrgencyModal();
+  });
 
   // ── Init ────────────────────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', loadDashboard);
